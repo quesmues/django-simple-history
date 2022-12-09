@@ -221,7 +221,7 @@ class HistoricalRecords:
 
         for field in m2m_fields:
             m2m_model = self.create_history_m2m_model(
-                history_model, field.remote_field.through
+                history_model, field
             )
             self.m2m_models[field] = m2m_model
 
@@ -252,12 +252,15 @@ class HistoricalRecords:
             )
         )
 
-    def create_history_m2m_model(self, model, through_model):
+    def create_history_m2m_model(self, model, m2m_field):
+        through_model = m2m_field.remote_field.through
+        related_model_name = m2m_field.remote_field.model
         attrs = {}
 
         fields = self.copy_fields(through_model)
         attrs.update(fields)
-        attrs.update(self.get_extra_fields_m2m(model, through_model, fields))
+        attrs.update(self.get_extra_fields_m2m(model, through_model, fields,
+                                               related_model_name))
 
         name = self.get_history_model_name(through_model)
         registered_models[through_model._meta.db_table] = through_model
@@ -456,9 +459,9 @@ class HistoricalRecords:
         else:
             return {}
 
-    def get_extra_fields_m2m(self, model, through_model, fields):
+    def get_extra_fields_m2m(self, model, through_model, fields, related_model_name):
         """Return dict of extra fields added to the m2m historical record model"""
-
+        app, model_name = related_model_name.lower().split(".")
         extra_fields = {
             "__module__": model.__module__,
             "__str__": lambda self: "{} as of {}".format(
@@ -472,7 +475,15 @@ class HistoricalRecords:
             "instance_type": through_model,
             "m2m_history_id": self._get_history_id_field(),
         }
-
+        # Tem que descobrir como pegar o historical related model,
+        # So pode ser usado com o nome default do simple history
+        related_model = app+".historical"+model_name
+        if related_model:
+            extra_fields['related_history'] = models.ForeignKey(
+                related_model,
+                db_constraint=False,
+                on_delete=models.DO_NOTHING,
+            )
         return extra_fields
 
     def get_extra_fields(self, model, fields):
@@ -665,6 +676,7 @@ class HistoricalRecords:
             m2m_history_model = self.m2m_models[field]
             original_instance = history_instance.instance
             through_model = getattr(original_instance, field.name).through
+            related_model_name = field.related_model._meta.model_name
 
             insert_rows = []
 
@@ -674,6 +686,10 @@ class HistoricalRecords:
 
             for row in rows:
                 insert_row = {"history": history_instance}
+
+                if hasattr(field.related_model, self.manager_name):
+                    insert_row["related_history"] = getattr(getattr(row,
+                        related_model_name), self.manager_name).first()
 
                 for through_model_field in through_model._meta.fields:
                     insert_row[through_model_field.name] = getattr(
