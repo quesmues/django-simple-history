@@ -259,8 +259,7 @@ class HistoricalRecords:
 
         fields = self.copy_fields(through_model)
         attrs.update(fields)
-        attrs.update(self.get_extra_fields_m2m(model, through_model, fields,
-                                               related_model_name))
+        attrs.update(self.get_extra_fields_m2m(model, through_model, related_model_name))
 
         name = self.get_history_model_name(through_model)
         registered_models[through_model._meta.db_table] = through_model
@@ -459,7 +458,7 @@ class HistoricalRecords:
         else:
             return {}
 
-    def get_extra_fields_m2m(self, model, through_model, fields, related_model_name):
+    def get_extra_fields_m2m(self, model, through_model, related_model_name):
         """Return dict of extra fields added to the m2m historical record model"""
         app, model_name = related_model_name.lower().split(".")
         extra_fields = {
